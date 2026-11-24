@@ -155,6 +155,7 @@ async function api(url, options = {}) {
   if (!response.ok) {
     const error = new Error(payload.error || 'İşlem tamamlanamadı.');
     error.payload = payload;
+    error.status = response.status;
     throw error;
   }
   return payload;
@@ -738,6 +739,13 @@ async function pollDocument(id) {
         );
       }
     } catch (e) {
+      if (e.status === 404 && state.current?.status === 'processing') {
+        // Boş arka yüz / imza sayfası okunduktan sonra kaydı tamamen kaldırılır.
+        const next = state.current.batch_documents?.find((item) => item.id !== id);
+        toast('Bu sayfa fatura içermediği için (boş/imza) atlandı.');
+        location.hash = next ? `document/${next.id}` : 'invoices';
+        return;
+      }
       toast(e.message);
       pollDocument(id);
     }

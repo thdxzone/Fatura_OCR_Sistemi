@@ -4,6 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 from pathlib import Path
+import shutil
 import sqlite3
 import unicodedata
 
@@ -263,6 +264,18 @@ class Store:
                 raise ValueError(
                     "Yalnızca inceleme bekleyen kayıtlar yeniden analiz edilebilir."
                 )
+
+    def discard(self, identifier):
+        """Fatura içermeyen, henüz okunan belgeyi iz bırakmadan kaldırır."""
+        with self.connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            cursor = db.execute(
+                "DELETE FROM documents WHERE id=? AND status='processing'", (identifier,)
+            )
+            if cursor.rowcount == 1:
+                db.execute("DELETE FROM analyses WHERE document_id=?", (identifier,))
+        if cursor.rowcount == 1:
+            shutil.rmtree(self.root / "files" / identifier, ignore_errors=True)
 
     def delete(self, identifier, revision):
         """Kaydı listeden çıkarır; ilk okuma ve onay geçmişini denetim için korur."""

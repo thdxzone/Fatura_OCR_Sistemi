@@ -13,7 +13,10 @@ os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
 
 def run(reader, source, mime):
-    from fatura.extraction.service import image_record, render_page, merge_records
+    from fatura.extraction.page_filter import is_blank_image
+    from fatura.extraction.service import (
+        NoInvoiceContent, image_record, merge_records, no_invoice_result, render_page,
+    )
     from fatura.invoice import extract
     from fatura.metrics import peak_rss_bytes
 
@@ -29,9 +32,16 @@ def run(reader, source, mime):
         raise ValueError("Bilinmeyen okuyucu.")
     from fatura.ocr.paddle_reader import PaddleBackend
 
+    # Boş sayfalar model yüklenmeden elenir; tamamen boş belgede model hiç yüklenmez.
+    blank = [is_blank_image(image) for image in images]
+    if all(blank):
+        return no_invoice_result(reader)
     backend = PaddleBackend()
-    records = [image_record(image, backend) for image in images]
-    result = merge_records(records)
+    records = [None if empty else image_record(image, backend) for image, empty in zip(images, blank)]
+    try:
+        result = merge_records(records)
+    except NoInvoiceContent:
+        return no_invoice_result(reader)
     result["metrics"] = {
         "elapsed_seconds": round(time.perf_counter() - started, 3),
         "process_peak_rss_bytes": peak_rss_bytes(),

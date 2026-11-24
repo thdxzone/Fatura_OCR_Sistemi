@@ -212,7 +212,7 @@ class Application:
                 prefix="invoice-batch-", dir=self.store.root
             ) as work:
                 paths = split_pages(data, work)
-                for index, path in enumerate(paths, start=1):
+                for index, path in paths:
                     identifier = uuid.uuid4().hex
                     directory = self.store.root / "files" / identifier
                     directory.mkdir()
@@ -238,6 +238,11 @@ class Application:
         try:
             reader = analyze_paddle if self.reader == "paddle" else analyze
             result = reader(self.store.file(identifier), doc["mime"])
+            if result.get("no_invoice_content"):
+                # Boş arka yüz / imza sayfası: kayıt ve dosya hiç tutulmaz.
+                self.store.discard(identifier)
+                LOG.info("Fatura içermeyen sayfa atlandı: %s (%s)", identifier, doc["filename"])
+                return
             self.store.analyzed(identifier, result)
         except Exception as error:
             LOG.exception("Belge analiz edilemedi: %s", identifier)

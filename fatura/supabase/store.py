@@ -12,9 +12,12 @@ PDF'ler Storage bucket'ında tutulur; OCR ve önizleme için yerel önbelleğe
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
+import logging
 from pathlib import Path
+import shutil
 import uuid
 
+from psycopg.errors import InsufficientPrivilege
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -23,7 +26,8 @@ from fatura.supabase.columns import Columns, TOTALS, fmt, item_record
 
 # Aynı fatura numarasının iki aktif kayda yazılmasını engelleyen işlem kilidi
 # (SQLite'taki BEGIN IMMEDIATE karşılığı). Unique index ek güvencedir.
-DUPLICATE_LOCK = "select pg_advisory_xact_lock(hashtext('fatura.belgeler.fatura_no'))"
+LOG = logging.getLogger("fatura")
+DUPLICATE_LOCK ="select pg_advisory_xact_lock(hashtext('fatura.belgeler.fatura_no'))"
 
 HEADER = (
     "satici_unvan", "satici_vkn", "satici_adres", "firma_id", "fatura_no",
@@ -355,6 +359,32 @@ class PgStore:
             )
             if cur.rowcount != 1:
                 raise ValueError("Yalnızca inceleme bekleyen kayıtlar yeniden analiz edilebilir.")
+
+    def discard(self, identifier):
+        """Fatura içermeyen, henüz okunan belgeyi iz bırakmadan kaldırır (kalemler,
+        OCR çalıştırmaları cascade ile silinir; bucket nesnesi ve yerel önbellek de)."""
+        key = uid(identifier)
+        try:
+            with self.cursor() as cur:
+                cur.execute(
+                    "delete from fatura.belgeler where id = %s and durum = 'processing' returning belge_yolu",
+                    (key,),
+                )
+                row = cur.fetchone()
+        except InsufficientPrivilege:
+            # 20261124100000_bos_sayfa_silme çalıştırılmamış: kayıt en azından listeden çıkar.
+            LOG.warning("DELETE yetkisi yok; fatura içermeyen belge yumuşak silindi: %s", identifier)
+            with self.cursor() as cur:
+                cur.execute(
+                    "update fatura.belgeler set durum = 'deleted', revizyon = revizyon + 1 "
+                    "where id = %s and durum = 'processing'",
+                    (key,),
+                )
+            return
+        if row is None:
+            return
+        self._discard([row["belge_yolu"]])
+        shutil.rmtree(self.root / "files" / key.hex, ignore_errors=True)
 
     def delete(self, identifier, revision):
         """Kaydı listeden çıkarır; ilk okuma, onay geçmişi ve PDF denetim için korunur."""

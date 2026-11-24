@@ -6,8 +6,18 @@ import subprocess
 import time
 import tempfile
 
+from fatura.extraction.page_filter import is_blank_image, is_invoice_text, ocr_text, page_text
 from fatura.invoice import extract, parse, validate
 from fatura.metrics import peak_rss_bytes
+
+
+class NoInvoiceContent(ValueError):
+    """Belgenin hiçbir sayfası fatura içeriği taşımıyor (boş / yalnızca imza)."""
+
+
+def no_invoice_result(reader=None):
+    """Kayıt açılmayacağını bildiren sonuç; uygulama bu belgeyi tamamen kaldırır."""
+    return {'no_invoice_content': True, 'reader': reader}
 
 
 def empty_record():
@@ -41,8 +51,11 @@ def render_page(source, directory, page=1):
 
 
 def image_record(image, backend):
+    """Sayfa kaydı; sayfa fatura içeriği taşımıyorsa (boş, imza/tarih) None döner."""
     from fatura.extraction.scan import parse_regions
     ocr = backend(image)
+    if not is_invoice_text(ocr_text(ocr)):
+        return None
     # Tedarikçi profili yoksa başlık ve etiketlere göre bölgeler türetilir.
     from fatura.extraction.flexible_layout import dynamic_regions
     regions, warnings = dynamic_regions(ocr)
@@ -109,10 +122,20 @@ def text_record(page):
 
 
 def merge_records(records):
-    """Sayfalardan gelen kalemleri birleştirir; çelişen değerleri görünür kılar."""
+    """Sayfalardan gelen kalemleri birleştirir; çelişen değerleri görünür kılar.
+
+    None olan sayfa fatura içermediği için atlanmıştır; sayfa numaraları korunur.
+    """
+    if not any(record is not None for record in records):
+        raise NoInvoiceContent('Belgede fatura içeren sayfa bulunamadı.')
     merged = empty_record()
     merged['issues'], merged['checks'] = [], []
+    skipped = [n for n, record in enumerate(records, 1) if record is None]
+    if skipped:
+        merged['issues'].append({'code': 'skipped_pages', 'detail': f'{", ".join(map(str, skipped))}. sayfa fatura içeriği taşımadığı için (boş/imza) okunmadı.'})
     for page_number, record in enumerate(records, 1):
+        if record is None:
+            continue
         record = deepcopy(record)
         def fix_page(value):
             if isinstance(value, dict):
@@ -160,25 +183,37 @@ def analyze(source, mime):
         pages = extract(source)
         if len(pages) > 30:
             raise ValueError('Bir seferde en fazla 30 sayfalık PDF yükleyebilirsiniz.')
-        # Tanımlı metin şablonlarında sayfa devamını mevcut ayrıştırıcı korur.
-        if all(p['method'] == 'pdf_text' for p in pages):
-            result = parse(pages)
-            if not result['items']:
-                result = merge_records([text_record(page) for page in pages])
-        else:
-            for i, page in enumerate(pages, 1):
-                if page['method'] == 'pdf_text':
-                    records.append(text_record(page))
-                else:
+        try:
+            # Tanımlı metin şablonlarında sayfa devamını mevcut ayrıştırıcı korur.
+            if all(p['method'] == 'pdf_text' for p in pages):
+                kept = [p for p in pages if is_invoice_text(page_text(p))]
+                if not kept:
+                    raise NoInvoiceContent('Belgede fatura içeren sayfa bulunamadı.')
+                result = parse(kept)
+                if not result['items']:
+                    result = merge_records([text_record(p) if p in kept else None for p in pages])
+            else:
+                for i, page in enumerate(pages, 1):
+                    if page['method'] == 'pdf_text':
+                        records.append(text_record(page) if is_invoice_text(page_text(page)) else None)
+                        continue
+                    image = render_page(source, source.parent, i)
+                    if is_blank_image(image):
+                        records.append(None)
+                        continue
                     if backend is None:
                         from fatura.ocr.backends import TesseractBackend
                         backend = TesseractBackend()
-                    records.append(image_record(render_page(source, source.parent, i), backend))
-            result = merge_records(records)
+                    records.append(image_record(image, backend))
+                result = merge_records(records)
+        except NoInvoiceContent:
+            return no_invoice_result()
     else:
         from fatura.ocr.backends import TesseractBackend
         backend = TesseractBackend()
         result = image_record(source.parent / 'page-1.png', backend)
+        if result is None:
+            return no_invoice_result()
     result['source'] = None
     result['metrics'] = {'elapsed_seconds': round(time.perf_counter()-start, 3), 'process_peak_rss_bytes': peak_rss_bytes()}
     return result
