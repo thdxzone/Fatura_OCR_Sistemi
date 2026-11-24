@@ -85,6 +85,7 @@ const paths = {
   refresh: '<path d="M20 7a9 9 0 1 0 1 8M20 3v5h-5"/>',
   layers: '<path d="m12 3 10 5-10 5L2 8zm-10 9 10 5 10-5M2 16l10 5 10-5"/>',
   save: '<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12l4 4v12a2 2 0 0 1-2 2Z"/><path d="M7 3v6h10V3M7 21v-7h10v7"/>',
+  pen: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13 7 4 4"/>',
 };
 // Metin kaçışları, tarih, para ve ortak HTML yardımcıları.
 const icon = (name) =>
@@ -581,6 +582,10 @@ function renderUpload() {
           <span>${icon('lock')} Belgeleriniz dışarıya gönderilmez.</span
           ><span>Tek veya çok sayfalı PDF’ler</span>
         </div>
+        <div class="manual-entry">
+          <span><strong>Belgeniz yok mu?</strong> Fatura bilgilerini elle girebilirsiniz.</span>
+          ${button('Faturayı elle gir', 'pen', 'manual-invoice', 'btn-light')}
+        </div>
       </section>
       <aside class="upload-aside">
         <section class="card">
@@ -789,14 +794,17 @@ function renderReview() {
   }
   const approved = d.status === 'approved';
   const processing = d.status === 'processing';
+  const manual = d.mime === 'manual'; // elle girilen: belge, önizleme ve yeniden okuma yok
   const r = state.form;
   if (r && r.service_id == null && d.service_match?.id) r.service_id = d.service_match.id;
   const count = r?.pages?.length || 1;
   app.innerHTML = /* HTML */ `<div class="page">
     ${heading(
-      'FATURA KONTROLÜ',
-      approved ? 'Kayıt tamamlandı' : 'Alanları kontrol edin',
-      'Okunan alanları belgeyle karşılaştırın, gerekirse düzeltip onaylayın.',
+      manual ? 'ELLE FATURA GİRİŞİ' : 'FATURA KONTROLÜ',
+      approved ? 'Kayıt tamamlandı' : manual ? 'Fatura bilgilerini girin' : 'Alanları kontrol edin',
+      manual
+        ? 'Fatura bilgilerini ve kalemleri girin; taslak olarak kaydedebilir veya onaylayabilirsiniz.'
+        : 'Okunan alanları belgeyle karşılaştırın, gerekirse düzeltip onaylayın.',
       button('Yeni fatura'),
     )}
     <div class="review-toolbar">
@@ -808,11 +816,11 @@ function renderReview() {
         </div>
       </div>
       <div class="stepper">
-        <span class="done"><b>${icon('check')}</b>Yükle</span><i></i
+        <span class="done"><b>${icon('check')}</b>${manual ? 'Elle gir' : 'Yükle'}</span><i></i
         ><span class="${approved ? 'done' : 'current'}"><b>02</b>Kontrol et</span><i></i
         ><span class="${approved ? 'current' : ''}"><b>03</b>Kaydet</span>
       </div>
-      ${d.status === 'review'
+      ${d.status === 'review' && !manual
         ? /* HTML */ `<button
             class="icon-button"
             data-action="retry"
@@ -828,8 +836,8 @@ function renderReview() {
     ${d.mime === 'application/pdf' && !d.batch_id && !processing
       ? `<div class="pdf-split-toolbar"><button class="btn btn-light" data-action="split-invoice-pages">${icon('files')} Toplu fatura olarak oku</button></div>`
       : ''}
-    <div class="review-grid">
-      <aside class="card preview-panel">
+    <div class="review-grid${manual ? ' no-preview' : ''}">
+      ${manual ? '' : /* HTML */ `<aside class="card preview-panel">
         <div class="preview-head">
           <span>Belge önizlemesi</span>
           <div>
@@ -881,7 +889,7 @@ function renderReview() {
             </button></span
           >
         </div>
-      </aside>
+      </aside>`}
       <div class="review-form">
         ${processing
           ? /* HTML */ `<section class="card processing-panel">
@@ -901,7 +909,7 @@ function renderReview() {
     ${footer()}
   </div>`;
   const preview = $('#document-preview');
-  preview.addEventListener('error', () => {
+  preview?.addEventListener('error', () => {
     preview.parentElement.innerHTML = /* HTML */ `<div class="preview-error">
       Önizleme henüz hazır değil.<br />Orijinal belgeyi üstteki düğmeyle açabilirsiniz.<br /><button
         class="btn btn-light"
@@ -954,6 +962,7 @@ function vatRatesSummary(record) {
 
 function renderForm(approved, r) {
   if (!r) return /* HTML */ `<div class="inline-error">Belge bilgileri alınamadı.</div>`;
+  const manual = state.current?.mime === 'manual'; // elle girilen: okuma ve belge metinleri yok
   const issues = r.issues || [];
   const err = state.errors;
   const issueLabels = {
@@ -1006,7 +1015,7 @@ function renderForm(approved, r) {
             : ''}
         </div>`
       : ''}
-    <div class="note-panel ${notes.length ? '' : 'check-ok'}">
+    ${manual && !notes.length ? '' : /* HTML */ `<div class="note-panel ${notes.length ? '' : 'check-ok'}">
       <strong
         >${icon(notes.length ? 'eye' : 'check')}${notes.length
           ? 'Son kontrol sizde.'
@@ -1014,7 +1023,9 @@ function renderForm(approved, r) {
       >
       <p>
         ${notes.length
-          ? 'Okunan değerleri belgenizle karşılaştırın. Eksik veya hatalı alanları değiştirebilirsiniz.'
+          ? manual
+            ? 'Girdiğiniz değerlerde kontrol edilmesi gereken noktalar var. Eksik veya hatalı alanları düzeltebilirsiniz.'
+            : 'Okunan değerleri belgenizle karşılaştırın. Eksik veya hatalı alanları değiştirebilirsiniz.'
           : 'Kaydetmeden önce satıcı ve fatura bilgilerini de doğrulayın.'}
       </p>
       ${notes.length
@@ -1025,7 +1036,7 @@ function renderForm(approved, r) {
             </ul>
           </details>`
         : ''}
-    </div>
+    </div>`}
     ${renderServiceField()}
     <section class="card form-card">
       <div class="form-section-title">
@@ -1125,7 +1136,9 @@ function renderForm(approved, r) {
             )
             .join('')
         : /* HTML */ `<div class="items-empty">
-            Ürün kalemleri otomatik okunamadı.<br />Belgenizden yeni bir kalem ekleyebilirsiniz.
+            ${manual
+              ? 'Henüz kalem eklenmedi.<br />Faturadaki ürün ve hizmetleri aşağıdan ekleyin.'
+              : 'Ürün kalemleri otomatik okunamadı.<br />Belgenizden yeni bir kalem ekleyebilirsiniz.'}
           </div>`}
       <button class="add-item" data-action="add-item">${icon('plus')} Yeni kalem ekle</button>
     </section>
@@ -1172,7 +1185,7 @@ function renderForm(approved, r) {
         })}
       </div>
     </section>
-    <details class="card form-card">
+    ${manual ? '' : /* HTML */ `<details class="card form-card">
       <summary style="font-size:11px;color:#8194ae;cursor:pointer">
         İlk okunan değerler ve hesap kontrolleri
       </summary>
@@ -1180,11 +1193,12 @@ function renderForm(approved, r) {
         İlk okuma korunur. Yaptığınız düzeltmeler onaylanan kayıtta ayrı saklanır.
       </p>
       <div class="source-raw">${esc(originalSummary(state.current.original))}</div>
-    </details>
+    </details>`}
     <section class="card approval-bar">
       <label
-        ><input id="reviewed" type="checkbox" ${state.reviewed ? 'checked' : ''} /> Fatura
-        alanlarını ve tutarları belgeyle karşılaştırdım. Varsa kontrol uyarılarını inceledim.</label
+        ><input id="reviewed" type="checkbox" ${state.reviewed ? 'checked' : ''} /> ${manual
+          ? 'Girdiğim fatura alanlarını ve tutarları kontrol ettim.'
+          : 'Fatura alanlarını ve tutarları belgeyle karşılaştırdım.'} Varsa kontrol uyarılarını inceledim.</label
       >
       <div class="approval-actions">
         ${button('Taslak kaydet', 'save', 'save-draft', 'btn-light')}${button(
@@ -2108,6 +2122,22 @@ document.addEventListener('click', async (e) => {
     else location.hash = 'upload';
   }
   if (action === 'choose') $('#file-input').click();
+  if (action === 'manual-invoice') {
+    if (state.dirty && !(await canLeave())) return;
+    target.disabled = true;
+    try {
+      const doc = await api('/api/documents/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      });
+      state.dirty = false;
+      location.hash = `document/${doc.id}`;
+    } catch (error) {
+      toast(error.message);
+      target.disabled = false;
+    }
+  }
   if (action === 'reload') navigate();
   if (action === 'save-draft') save(false);
   if (action === 'approve') save(true);

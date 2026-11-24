@@ -18,7 +18,7 @@ import uuid
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from fatura.storage import DuplicateInvoice
+from fatura.storage import MANUAL, DuplicateInvoice
 from fatura.supabase.columns import Columns, TOTALS, fmt, item_record
 
 # Aynı fatura numarasının iki aktif kayda yazılmasını engelleyen işlem kilidi
@@ -103,6 +103,10 @@ class PgStore:
             runs = cur.fetchall()
             items = self._items(cur, [key]).get(key, [])
         base = next((r["ham_cikti"] for r in runs if r["id"] == row["kaynak_ocr_id"]), None)
+        if row["mime_turu"] == MANUAL:
+            from fatura.extraction.service import empty_record
+
+            base = empty_record()  # elle girilen kaydın OCR çıktısı yoktur
         document = self._document(row, items, base)
         document["original"] = runs[0]["ham_cikti"] if runs else None
         return document
@@ -144,6 +148,8 @@ class PgStore:
                 row = cur.fetchone()
             if row is None:
                 raise FileNotFoundError("Kayıt bulunamadı.")
+            if row["belge_yolu"] is None:
+                raise FileNotFoundError("Bu fatura elle girildi; belgesi yok.")
             self.files.download(row["belge_yolu"], path)
         return path
 
@@ -179,7 +185,7 @@ class PgStore:
             "batch_count": row["grup_sayfa_sayisi"],
             "edited": None,
         }
-        if row["kaynak_ocr_id"] is None:
+        if row["kaynak_ocr_id"] is None and row["mime_turu"] != MANUAL:
             return document  # henüz okunmadı
         record = deepcopy(base) if base else {}
         record.update(
@@ -222,6 +228,22 @@ class PgStore:
         except Exception:
             self._discard([path])
             raise
+        return self.get(identifier)
+
+    def create_manual(self, identifier, filename, record):
+        """Belgesiz, elle girilen fatura: bucket'a dosya gitmez, doğrudan incelemede açılır."""
+        columns = Columns(record, strict=True)
+        key = uid(identifier)
+        with self.cursor() as cur:
+            values = self._header(cur, columns, record.get("service_id"), approve=False)
+            values |= {"id": key, "dosya_adi": filename, "mime_turu": MANUAL, "durum": "review"}
+            names = list(values)
+            cur.execute(
+                f"insert into fatura.belgeler ({', '.join(names)}) "
+                f"values ({', '.join(f'%({n})s' for n in names)})",
+                values,
+            )
+            self._replace_items(cur, key, columns.items)
         return self.get(identifier)
 
     def create_batch(self, documents, batch_id, replaced=None):
@@ -328,8 +350,8 @@ class PgStore:
         with self.cursor() as cur:
             cur.execute(
                 "update fatura.belgeler set durum = 'processing', hata_mesaji = null, revizyon = revizyon + 1 "
-                "where id = %s and durum = 'review'",
-                (uid(identifier),),
+                "where id = %s and durum = 'review' and mime_turu <> %s",
+                (uid(identifier), MANUAL),
             )
             if cur.rowcount != 1:
                 raise ValueError("Yalnızca inceleme bekleyen kayıtlar yeniden analiz edilebilir.")
@@ -367,9 +389,10 @@ class PgStore:
             return None
         cur.execute(
             "select id from fatura.belgeler where id <> %s and fatura_no_anahtar = %s "
-            "and durum in ('processing', 'review', 'approved') and kaynak_ocr_id is not null "
+            "and durum in ('processing', 'review', 'approved') "
+            "and (kaynak_ocr_id is not null or mime_turu = %s) "
             "order by created_at, id limit 1",
-            (key, number_key),
+            (key, number_key, MANUAL),
         )
         row = cur.fetchone()
         return row["id"] if row else None

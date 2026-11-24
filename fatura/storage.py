@@ -8,6 +8,10 @@ import sqlite3
 import unicodedata
 
 
+# Elle girilen faturanın türü: belgesi yoktur, OCR'a ve önizlemeye girmez.
+MANUAL = "manual"
+
+
 def invoice_key(value):
     """Harf/rakamları değiştirmeden boşluk ve büyük/küçük harf farkını kaldırır."""
     return "".join(unicodedata.normalize("NFKC", value or "").upper().split())
@@ -78,6 +82,18 @@ class Store:
             raise
         finally:
             db.close()
+
+    def create_manual(self, identifier, filename, record):
+        """Belgesiz, elle girilen fatura: OCR'a girmez, doğrudan incelemede açılır."""
+        stamp = now()
+        with self.connect() as db:
+            db.execute(
+                "INSERT INTO documents(id,filename,mime,status,created_at,updated_at,edited_json) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (identifier, filename, MANUAL, "review", stamp, stamp,
+                 json.dumps(record, ensure_ascii=False)),
+            )
+        return self.get(identifier)
 
     def create(self, identifier, filename, mime):
         stamp = now()
@@ -239,7 +255,8 @@ class Store:
     def retry(self, identifier):
         with self.connect() as db:
             cursor = db.execute(
-                "UPDATE documents SET status='processing', error=NULL, updated_at=?, revision=revision+1 WHERE id=? AND status='review'",
+                "UPDATE documents SET status='processing', error=NULL, updated_at=?, revision=revision+1 "
+                f"WHERE id=? AND status='review' AND mime!='{MANUAL}'",
                 (now(), identifier),
             )
             if cursor.rowcount != 1:

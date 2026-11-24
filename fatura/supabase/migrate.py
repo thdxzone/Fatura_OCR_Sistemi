@@ -31,7 +31,7 @@ import tempfile
 import uuid
 
 from fatura.analysis.services import Services, words
-from fatura.storage import DuplicateInvoice
+from fatura.storage import MANUAL, DuplicateInvoice
 from fatura.supabase.columns import Columns, ITEM_NUMBERS, TOTALS
 
 ACTIVE = ("processing", "review", "approved")
@@ -167,16 +167,19 @@ def plan(source, conflicts="dur"):
         if doc["status"] == "processing":
             problems.append(f"{identifier}: okuma sürüyor görünüyor; uygulama durdurulmamış olabilir.")
         runs = source.analyses.get(identifier, [])
+        manual = doc["mime"] == MANUAL  # elle girilen: belgesi ve OCR çalıştırması yoktur
         if any(run.get("synthetic") for run in runs):
             result.notes.append(f"{identifier}: OCR çalıştırması yoktu; ilk okuma çalıştırma olarak taşınacak.")
-        if doc["edited"] is not None and not runs:
+        if doc["edited"] is not None and not runs and not manual:
             problems.append(f"{identifier}: okunmuş kayıt var ama OCR çalıştırması yok.")
         if runs and doc["original"] != runs[0]["data"]:
             problems.append(f"{identifier}: ilk okuma (original) en eski OCR çalıştırmasıyla aynı değil.")
         if doc["status"] == "approved" and not source.approvals.get(identifier):
             problems.append(f"{identifier}: onaylı ama onay kaydı yok.")
         pdf = source.pdf(identifier)
-        if not pdf.is_file():
+        if manual:
+            pass
+        elif not pdf.is_file():
             problems.append(f"{identifier}: PDF dosyası yok.")
         else:
             with pdf.open("rb") as handle:
@@ -388,13 +391,14 @@ def _write_document(cur, store, source, plan_, doc):
     source_run = None
     if doc["edited"] is not None:
         # Kaydetme, ilk okumanın kanıtını taşır (PgStore.save); okuma sonrası kayıt son çalıştırmadır.
-        source_run = run_ids[-1] if doc["edited"] == runs[-1]["data"] else run_ids[0]
+        if run_ids:
+            source_run = run_ids[-1] if doc["edited"] == runs[-1]["data"] else run_ids[0]
         values = store._header(cur, columns, doc["edited"].get("service_id"), approve=False)
     values |= {
         "id": key,
         "dosya_adi": doc["filename"],
         "mime_turu": doc["mime"],
-        "belge_yolu": object_path(doc),
+        "belge_yolu": None if doc["mime"] == MANUAL else object_path(doc),
         "durum": doc["status"],
         "revizyon": doc["revision"],
         "hata_mesaji": doc["error"],
@@ -587,6 +591,8 @@ def upload_files(files, source, documents):
     problems, reused = [], 0
     with tempfile.TemporaryDirectory(prefix="fatura-tasima-") as work:
         for doc in documents:
+            if doc["mime"] == MANUAL:
+                continue  # elle girilen faturanın belgesi yok
             path = object_path(doc)
             data = source.pdf(doc["id"]).read_bytes()
             try:

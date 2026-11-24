@@ -216,6 +216,34 @@ class SupabaseBackendTests(unittest.TestCase):
             saved = store.save(second, document["edited"], document["revision"])
             self.assertEqual((saved["status"], saved["duplicate_of"], saved["error"]), ("review", None, None))
 
+    def test_manual_invoice_matches_sqlite(self):
+        from fatura.web.app import normalized_record
+
+        identifier = secrets.token_hex(16)
+        self.both(lambda store: store.create_manual(identifier, "Elle girilen fatura", empty_record()))
+        self.assertSameDocument(identifier)
+        # Uygulama kaydı böyle kurar: belgesiz kayıtta temel, boş kayıttır.
+        record = normalized_record(self.numbered("EL-1"), None)
+        self.both(lambda store: store.save(identifier, record, 1, approved=True))
+        self.assertSameDocument(identifier)
+        sqlite, pg = self.both(lambda store: store.list())
+        self.assertEqual([listed(d) for d in sqlite], [listed(d) for d in pg])
+
+        # Aynı kurallar: elle girilen fatura, aynı numaralı okunan faturayı mükerrer yapar.
+        other = secrets.token_hex(16)
+        self.create(other)
+        self.both(lambda store: store.analyzed(other, self.numbered("EL-1")))
+        self.assertEqual([s.get(other)["status"] for s in (self.sqlite, self.pg)], ["duplicate"] * 2)
+
+        self.assertEqual(len(self.files.objects), 1)  # elle girilen kaydın bucket'ta nesnesi yok
+        with self.assertRaisesRegex(FileNotFoundError, "elle girildi"):
+            self.pg.file(identifier)
+        with self.pg.cursor() as cur:  # incelemedeyken bile yeniden okunamaz
+            cur.execute("update fatura.belgeler set durum = 'review', onaylanma_zamani = null where id = %s",
+                        (uuid.UUID(hex=identifier),))
+        with self.assertRaises(ValueError):
+            self.pg.retry(identifier)
+
     def test_deleted_duplicate_keeps_reference(self):
         first, second = secrets.token_hex(16), secrets.token_hex(16)
         for identifier in (first, second):
@@ -444,7 +472,9 @@ class SupabaseBackendTests(unittest.TestCase):
         store.delete(deleted_duplicate, 2)
         deleted = self.add(store, "D-1")
         store.delete(deleted, 2)
-        identifiers = (approved, review, retried, duplicate, deleted_duplicate, deleted)
+        manual = secrets.token_hex(16)  # elle girilen: belgesi ve OCR çalıştırması yok
+        store.create_manual(manual, "Elle girilen fatura", empty_record())
+        identifiers = (approved, review, retried, duplicate, deleted_duplicate, deleted, manual)
 
         lines = self.migrate(root, mode="prova")
         self.assertIn("geri alındı", lines[-1])
@@ -462,7 +492,7 @@ class SupabaseBackendTests(unittest.TestCase):
         with self.pool.connection() as conn:
             card = conn.execute("select unvan from core.firmalar where vkn = '1234567890'").fetchone()
         self.assertEqual(card, ("Örnek Tedarikçi",))  # onaylanan kayıttaki unvan
-        self.assertEqual(len(self.files.objects), len(identifiers))
+        self.assertEqual(len(self.files.objects), len(identifiers) - 1)  # elle girilenin PDF'i yok
         with self.assertRaisesRegex(MigrationError, "sorun"):
             self.migrate(root)  # hedef artık boş değil
 

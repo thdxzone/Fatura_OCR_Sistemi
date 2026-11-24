@@ -21,7 +21,7 @@ import uuid
 
 from fatura.extraction.service import analyze, empty_record, render_page
 from fatura.invoice import number, validate
-from fatura.storage import Store, DuplicateInvoice
+from fatura.storage import MANUAL, Store, DuplicateInvoice
 from fatura.ocr.runtime import analyze_paddle
 from fatura.analysis.services import Services, clean_aliases
 from fatura.extraction.pdf_batch import inspect_pdf, split_pages
@@ -194,6 +194,13 @@ class Application:
         doc = self.store.create(identifier, filename, "application/pdf")
         self.executor.submit(self.process, identifier)
         return doc
+
+    def create_manual(self):
+        """Belgesiz fatura: boş form incelemede açılır; kayıt ve onay kuralları aynıdır."""
+        record = empty_record()
+        # Boş formdaki "eksik alan" uyarıları okuma içindir; kayıtta kurallar yeniden denetlenir.
+        record["issues"], record["checks"] = [], []
+        return self.store.create_manual(uuid.uuid4().hex, "Elle girilen fatura", record)
 
     def accept_batch(self, data, filename, replaced=None):
         """Önce PDF'ler, sonra tüm kayıtlar hazırlanır; işler sayfa sırasıyla kuyruğa alınır."""
@@ -373,6 +380,8 @@ class InvoiceEndpoints:
                 doc["services"] = self.app.services.rows()
                 doc["service_match"] = self.app.services.match(doc.get("edited") or {})
                 return self.send(200, doc)
+            if parts[3] in ("source", "preview") and doc["mime"] == MANUAL:
+                raise FileNotFoundError("Bu fatura elle girildi; belgesi yok.")
             source = self.app.store.file(doc["id"])
             if parts[3] == "source":
                 return self.send(
@@ -434,6 +443,8 @@ class InvoiceEndpoints:
         if len(parts) == 4 and parts[:2] == ["api", "services"] and parts[3] == "save":
             row = self.app.services.update(unquote(parts[2]), json.loads(self.body()))
             return self.send(200, row)
+        if parsed.path == "/api/documents/manual":
+            return self.send(201, self.app.create_manual())
         if parsed.path == "/api/uploads/inspect":
             return self.send(200, {"page_count": inspect_pdf(self.body(MAX_UPLOAD))})
         if parsed.path == "/api/uploads":
@@ -475,6 +486,8 @@ class InvoiceEndpoints:
                 self.app.store.delete(doc["id"], int(payload["revision"]))
                 return self.send(200, {"deleted": True})
             if parts[3] == "retry":
+                if doc["mime"] == MANUAL:
+                    raise ValueError("Elle girilen fatura yeniden okunamaz; alanları düzenleyebilirsiniz.")
                 self.app.store.retry(doc["id"])
                 self.app.executor.submit(self.app.process, doc["id"])
                 return self.send(202, self.app.store.get(doc["id"]))

@@ -1169,6 +1169,25 @@ button {
   margin-top: 15px;
 }
 
+/* Belgesi olmayan fatura için elle giriş seçeneği. */
+.manual-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed #c9d3e0;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #51627a;
+}
+
+.manual-entry strong {
+  color: #13306b;
+}
+
 .upload-hint {
   display: flex;
   justify-content: space-between;
@@ -1276,6 +1295,12 @@ button {
   grid-template-columns: minmax(280px, 0.8fr) minmax(0, 1.35fr);
   gap: 22px;
   align-items: start;
+}
+
+/* Elle girilen faturada önizleme yok; form tek sütunda, okunur genişlikte. */
+.review-grid.no-preview {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 1040px;
 }
 
 .preview-panel {
