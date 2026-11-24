@@ -1,6 +1,7 @@
 """Mevcut kayıtları boş bir kalıcı diske taşır; dolu hedefe asla yazmaz."""
 
 import argparse
+from contextlib import closing
 from pathlib import Path
 import shutil
 import sqlite3
@@ -29,11 +30,11 @@ def seed(source, target):
             ),
         )
         # Dosyayı doğrudan kopyalamak yerine SQLite'ın tutarlı yedek API'si kullanılır.
-        with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as current:
+        with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as current:
             if current.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Kaynak veritabanının bütünlük kontrolü başarısız.")
             (staged / "invoices.sqlite3").unlink()
-            with sqlite3.connect(staged / "invoices.sqlite3") as backup:
+            with closing(sqlite3.connect(staged / "invoices.sqlite3")) as backup:
                 current.backup(backup)
         # Dolu hedef, ikinci kontrolde de korunur; boş volume dizini değiştirilebilir.
         if target.exists() and any(target.iterdir()):

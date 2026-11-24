@@ -1,6 +1,7 @@
 """Veritabanını SQLite yedek API'siyle, belgeleriyle birlikte ZIP'e alır."""
 
 import argparse
+from contextlib import closing
 import os
 from pathlib import Path
 import sqlite3
@@ -19,10 +20,10 @@ def backup(source, destination):
     with tempfile.TemporaryDirectory(prefix="fatura-backup-") as work:
         snapshot = Path(work) / "invoices.sqlite3"
         database = source / "invoices.sqlite3"
-        with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as current:
+        with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True)) as current:
             if current.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
                 raise ValueError("Kaynak veritabanının bütünlüğü doğrulanamadı.")
-            with sqlite3.connect(snapshot) as copy:
+            with closing(sqlite3.connect(snapshot)) as copy:
                 current.backup(copy)
         # Geçici çıktı, yarım kalan dosyanın tamamlanmış yedek sanılmasını engeller.
         with tempfile.NamedTemporaryFile(
