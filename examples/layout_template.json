@@ -1,0 +1,15 @@
+{
+  "header_contains": ["Mal Hizmet", "Miktar", "Birim Fiyat", "KDV", "Tutar"],
+  "stop_prefixes": ["KDV Hariç Toplam:", "KDV Toplam:", "KDV Dahil Toplam:", "Ödenecek Tutar:"],
+  "net_marker": "Birim fiyat ve tutarlar KDV hariçtir",
+  "gross_marker": "Birim fiyat ve tutarlar KDV dahildir",
+  "columns": {
+    "name": [20, 160],
+    "description": [160, 270],
+    "quantity": [270, 320],
+    "unit": [320, 370],
+    "unit_price": [370, 460],
+    "vat_rate": [460, 510],
+    "line_total": [510, 595]
+  }
+}

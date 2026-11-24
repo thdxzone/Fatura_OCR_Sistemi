@@ -1,0 +1,33 @@
+# Her bilgisayarda yeniden kurulan Python ortamları ve geçici dosyalar.
+.venv/
+.venv-*/
+venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+tmp/
+output/
+.env
+.env.*
+*.pem
+*.key
+
+# Gerçek faturalar, veritabanı ve Excel başlangıç verisi Git'e girmez (KVKK / ticari gizlilik).
+# Bilgisayarlar arası taşıma: scripts/backup_data.py ile alınan ZIP.
+data/
+
+# SQLite'ın geçici günlükleri veritabanı yedeği değildir.
+*.sqlite3-journal
+*.sqlite3-wal
+*.sqlite3-shm
+
+# Büyük, yeniden indirilebilir model ve paket önbellekleri.
+models/paddlex/*
+!models/paddlex/official_models/
+**/.cache/
+*.partial
+
+# Üretim sırları örnekte bulunmaz; kilit yalnızca çalışma anında kullanılır.
+!kurulum/coolify.env.example
+.instance.lock
+backups/

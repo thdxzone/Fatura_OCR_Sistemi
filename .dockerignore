@@ -1,0 +1,17 @@
+.git
+.venv
+.venv-*
+**/__pycache__
+**/*.pyc
+.DS_Store
+.env
+.env.*
+*.pem
+*.key
+data
+backups
+tmp
+output
+models/paddlex/*
+!models/paddlex/official_models/
+**/.cache

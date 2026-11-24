@@ -1,0 +1,381 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "source",
+    "seller",
+    "invoice_date",
+    "invoice_number",
+    "currency",
+    "items",
+    "totals",
+    "evidence",
+    "checks",
+    "issues",
+    "pages",
+    "needs_review",
+    "metrics"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "string"
+    },
+    "source": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "seller": {
+      "type": "object",
+      "required": [
+        "name",
+        "tax_id",
+        "address"
+      ],
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tax_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "address": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "invoice_date": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "invoice_number": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "currency": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "quantity",
+          "unit",
+          "unit_price",
+          "vat_rate",
+          "line_total",
+          "discount",
+          "price_basis",
+          "total_basis",
+          "evidence"
+        ],
+        "properties": {
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "quantity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "unit_price": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vat_rate": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "line_total": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "discount": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "price_basis": {
+            "type": "string"
+          },
+          "total_basis": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "required": [
+              "text",
+              "page",
+              "bbox"
+            ],
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "page": {
+                "type": "number"
+              },
+              "bbox": {
+                "type": "array",
+                "items": {
+                  "type": "number"
+                }
+              },
+              "words": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "totals": {
+      "type": "object",
+      "required": [
+        "net",
+        "vat",
+        "gross",
+        "discount",
+        "withholding",
+        "payable"
+      ],
+      "properties": {
+        "net": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "vat": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "gross": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "discount": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "withholding": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "payable": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "object"
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "field",
+          "observed",
+          "calculated",
+          "ok"
+        ],
+        "properties": {
+          "field": {
+            "type": "string"
+          },
+          "observed": {
+            "type": "string"
+          },
+          "calculated": {
+            "type": "string"
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "code",
+          "detail"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "page",
+          "width",
+          "height",
+          "method",
+          "lines"
+        ],
+        "properties": {
+          "page": {
+            "type": "number"
+          },
+          "width": {
+            "type": "number"
+          },
+          "height": {
+            "type": "number"
+          },
+          "method": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "text",
+                "page",
+                "bbox"
+              ],
+              "properties": {
+                "text": {
+                  "type": "string"
+                },
+                "page": {
+                  "type": "number"
+                },
+                "bbox": {
+                  "type": "array",
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "words": {
+                  "type": "array",
+                  "items": {
+                    "type": "object"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "needs_review": {
+      "type": "boolean"
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "elapsed_seconds",
+        "process_peak_rss_bytes"
+      ],
+      "properties": {
+        "elapsed_seconds": {
+          "type": "number"
+        },
+        "process_peak_rss_bytes": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "invoice_note": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Yerel fatura ortak veri şeması v1"
+}

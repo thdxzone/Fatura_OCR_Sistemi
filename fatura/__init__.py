@@ -1,0 +1,1 @@
+"""Fatura yönetim uygulaması."""
